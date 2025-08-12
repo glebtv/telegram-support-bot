@@ -1,4 +1,4 @@
-FROM node:18.4-alpine
+FROM node:22-alpine
 
 WORKDIR /bot
 
