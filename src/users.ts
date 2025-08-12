@@ -9,6 +9,41 @@ import * as log from 'fancy-log'
 const TIME_BETWEEN_CONFIRMATION_MESSAGES = 86400000; // 24 hours
 
 /**
+ * Intelligently escapes unpaired markdown characters in LLM responses.
+ * Preserves intentional markdown formatting while escaping literal special characters.
+ * 
+ * @param text - The text to escape
+ * @returns The escaped text
+ */
+function escapeUnpairedMarkdown(text: string): string {
+  // For Markdown mode, we need to be careful about underscores
+  // Count occurrences of markdown characters to detect unpaired ones
+  
+  // Handle underscores - escape if not paired for italics
+  let result = text;
+  
+  // Find all underscores and check if they're paired
+  const underscoreMatches = [...text.matchAll(/_/g)];
+  if (underscoreMatches.length % 2 !== 0) {
+    // Odd number of underscores - escape all of them to be safe
+    result = result.replace(/_/g, '\\_');
+  } else {
+    // Even number - check if they look like usernames/emails (common case)
+    // Escape underscores in common patterns like @username_bot or email_address@
+    result = result.replace(/@(\w+)_(\w+)/g, '@$1\\_$2'); // Telegram usernames
+    result = result.replace(/(\w+)_(\w+)@/g, '$1\\_$2@'); // Email addresses
+  }
+  
+  // For backticks, escape if not paired
+  const backtickCount = (result.match(/`/g) || []).length;
+  if (backtickCount % 2 !== 0) {
+    result = result.replace(/`/g, '\\`');
+  }
+  
+  return result;
+}
+
+/**
  * Generates a ticket message.
  *
  * @param ticket - Ticket object with a toString() method.
@@ -45,10 +80,11 @@ function formatMessageAsTicket(
 function createAutoReplyMessage(msg: string, ctx: Context): string {
   const { config } = cache;
   const senderName = ctx.message.from.first_name;
-  // Don't escape the LLM message content as it should already be properly formatted
+  // Apply smart escaping to LLM message to handle any unescaped special characters
+  const escapedMsg = escapeUnpairedMarkdown(msg);
   return config.clean_replies
-    ? msg
-    : `${config.language.dear} ${esc(senderName)},\n\n${msg}\n\n${config.language.regards}\n${config.language.automatedReplyAuthor}\n\n*${config.language.automatedReply}*`;
+    ? escapedMsg
+    : `${config.language.dear} ${esc(senderName)},\n\n${escapedMsg}\n\n${config.language.regards}\n${config.language.automatedReplyAuthor}\n\n*${config.language.automatedReply}*`;
 }
 
 /**
