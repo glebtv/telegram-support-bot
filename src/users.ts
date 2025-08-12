@@ -45,6 +45,7 @@ function formatMessageAsTicket(
 function createAutoReplyMessage(msg: string, ctx: Context): string {
   const { config } = cache;
   const senderName = ctx.message.from.first_name;
+  // Don't escape the LLM message content as it should already be properly formatted
   return config.clean_replies
     ? msg
     : `${config.language.dear} ${esc(senderName)},\n\n${msg}\n\n${config.language.regards}\n${config.language.automatedReplyAuthor}\n\n*${config.language.automatedReply}*`;

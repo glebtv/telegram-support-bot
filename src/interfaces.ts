@@ -125,6 +125,8 @@ export class Config {
   llm_base_url: string;
   llm_model: string;
   llm_knowledge: string;
+  llm_system_prompt: string;
+  llm_log_responses: boolean;
 }
 
 export interface Cache {
