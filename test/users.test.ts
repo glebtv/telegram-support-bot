@@ -196,6 +196,84 @@ describe('Users Module', () => {
       expect(reply).toHaveBeenCalled();
       expect(sendMessage).toHaveBeenCalled();
     });
+
+    it('should fallback to normal flow when LLM returns null', async () => {
+      cache.config.use_llm = true;
+      cache.config.show_auto_replied = false;
+      cache.config.autoreply_confirmation = true;
+      
+      // Mock LLM returning null (refused to answer)
+      (llm.getResponseFromLLM as jest.Mock).mockResolvedValue(null);
+      
+      await chat(mockContext, { id: '12345' });
+      
+      // Should NOT call reply (no auto-reply was sent)
+      expect(reply).not.toHaveBeenCalled();
+      
+      // Should send confirmation message to user
+      expect(sendMessage).toHaveBeenCalledWith(
+        '12345',
+        mockContext.messenger,
+        'Thank you for contacting us.\n'
+      );
+      
+      // Should send ticket to staff without "Automated reply was sent" message
+      expect(sendMessage).toHaveBeenCalledWith(
+        '-123456789',
+        'telegram',
+        expect.not.stringContaining('Automated reply was sent to the user')
+      );
+    });
+
+    it('should fallback to normal flow when LLM returns "null" string', async () => {
+      cache.config.use_llm = true;
+      cache.config.show_auto_replied = false;
+      cache.config.autoreply_confirmation = true;
+      
+      // Mock LLM returning "null" as a string (this should be handled in llm.ts)
+      (llm.getResponseFromLLM as jest.Mock).mockResolvedValue(null);
+      
+      await chat(mockContext, { id: '12345' });
+      
+      // Should NOT call reply (no auto-reply was sent)
+      expect(reply).not.toHaveBeenCalled();
+      
+      // Should send confirmation message to user
+      expect(sendMessage).toHaveBeenCalledWith(
+        '12345',
+        mockContext.messenger,
+        'Thank you for contacting us.\n'
+      );
+    });
+
+    it('should handle LLM errors gracefully', async () => {
+      cache.config.use_llm = true;
+      cache.config.autoreply_confirmation = true;
+      
+      // Silence console.error for this test
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      
+      // Mock LLM throwing an error
+      (llm.getResponseFromLLM as jest.Mock).mockRejectedValue(new Error('LLM API error'));
+      
+      await chat(mockContext, { id: '12345' });
+      
+      // Should NOT call reply (no auto-reply was sent)
+      expect(reply).not.toHaveBeenCalled();
+      
+      // Should send confirmation message to user (fallback behavior)
+      expect(sendMessage).toHaveBeenCalledWith(
+        '12345',
+        mockContext.messenger,
+        'Thank you for contacting us.\n'
+      );
+      
+      // Verify error was logged
+      expect(consoleErrorSpy).toHaveBeenCalledWith('LLM response failed:', expect.any(Error));
+      
+      // Restore console.error
+      consoleErrorSpy.mockRestore();
+    });
   });
 
   describe('Spam protection', () => {

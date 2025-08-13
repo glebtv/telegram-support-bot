@@ -109,12 +109,17 @@ async function autoReply(ctx: Context): Promise<boolean> {
     }
   }
 
-  // Fallback to LLM response if enabled
+  // Try LLM response if enabled
   if (use_llm) {
-    const response = await llm.getResponseFromLLM(ctx);
-    if (response !== null) {
-      reply(ctx, createAutoReplyMessage(response, ctx));
-      return true;
+    try {
+      const response = await llm.getResponseFromLLM(ctx);
+      if (response !== null) {
+        reply(ctx, createAutoReplyMessage(response, ctx));
+        return true;
+      }
+    } catch (error) {
+      // Log error but continue with normal flow
+      console.error('LLM response failed:', error);
     }
   }
   return false;

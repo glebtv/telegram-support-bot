@@ -153,6 +153,54 @@ describe('LLM Module', () => {
       expect(response).toBeNull();
     });
 
+    it('should return null when LLM responds with "NULL"', async () => {
+      mockChat.mockResolvedValue({
+        message: {
+          content: 'NULL'
+        }
+      });
+
+      const response = await llm.getResponseFromLLM(mockContext);
+      
+      expect(response).toBeNull();
+    });
+
+    it('should return null when LLM responds with empty string', async () => {
+      mockChat.mockResolvedValue({
+        message: {
+          content: ''
+        }
+      });
+
+      const response = await llm.getResponseFromLLM(mockContext);
+      
+      expect(response).toBeNull();
+    });
+
+    it('should return null when LLM responds with whitespace only', async () => {
+      mockChat.mockResolvedValue({
+        message: {
+          content: '   '
+        }
+      });
+
+      const response = await llm.getResponseFromLLM(mockContext);
+      
+      expect(response).toBeNull();
+    });
+
+    it('should return null when LLM message content is null', async () => {
+      mockChat.mockResolvedValue({
+        message: {
+          content: null
+        }
+      });
+
+      const response = await llm.getResponseFromLLM(mockContext);
+      
+      expect(response).toBeNull();
+    });
+
     it('should handle LLM errors gracefully', async () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       mockChat.mockRejectedValue(new Error('API Error'));

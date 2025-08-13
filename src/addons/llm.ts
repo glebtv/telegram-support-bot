@@ -49,11 +49,12 @@ async function getResponseFromLLM(ctx: Context): Promise<string | null> {
         return null;
     }
 
-    if (!response || !response.message) {
+    if (!response || !response.message || !response.message.content) {
         return null;
     }
 
-    const message = response.message.content.toString();
+    const messageContent = response.message.content;
+    const message = messageContent ? messageContent.toString() : null;
     
     // Log LLM response if logging is enabled
     if (cache.config.llm_log_responses) {
@@ -62,8 +63,14 @@ async function getResponseFromLLM(ctx: Context): Promise<string | null> {
         log.info(`LLM response: ${message}`);
     }
     
-    if (message === "null" || message === "Null" || message === null) {
-        return null
+    // Check for various null representations
+    if (!message || 
+        message === "null" || 
+        message === "Null" || 
+        message === "NULL" ||
+        message.toLowerCase() === "null" ||
+        message.trim() === "") {
+        return null;
     }
 
     return message;
