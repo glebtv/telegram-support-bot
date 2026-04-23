@@ -1,43 +1,15 @@
-# Build stage
-FROM node:22-alpine AS builder
+FROM node:22.22.0-alpine
 
 WORKDIR /bot
 
-# Copy package files
 COPY ./package.json /bot/package.json
 COPY ./package-lock.json /bot/package-lock.json
 
-# Install build dependencies and all dependencies (including devDependencies for building)
-RUN apk add --no-cache python3 build-base
-RUN npm ci
+RUN apk update && apk add --no-cache wget python3 build-base
 
-# Copy source code and build configuration
+RUN npm install --fetch-retry-maxtimeout=120000 --fetch-timeout=300000
+
 COPY ./src /bot/src
 COPY ./tsconfig.json /bot/tsconfig.json
 
-# Build the application
-RUN npm run build
-
-# Production stage
-FROM node:22-alpine AS production
-
-WORKDIR /bot
-
-# Copy package files
-COPY ./package.json /bot/package.json
-COPY ./package-lock.json /bot/package-lock.json
-
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 build-base
-
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy built application from builder stage
-COPY --from=builder /bot/build /bot/build
-
-# Set NODE_ENV to production
-ENV NODE_ENV=production
-
-# Run the application
 CMD ["npm", "run", "prod", "--prefix", "/bot"]

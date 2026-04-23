@@ -179,7 +179,7 @@ export const add = async (
     result = await Supportee.findOneAndReplace(
       { messenger, userid },
       { userid, messenger, ticketId, status, category },
-      { upsert: true }
+      { upsert: true, returnDocument: 'after' }
     );
   } else if (status === 'banned') {
     result = await Supportee.findOneAndReplace(

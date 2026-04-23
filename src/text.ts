@@ -69,7 +69,12 @@ export async function ticketHandler(bot: Addon, ctx: Context): Promise<ISupporte
   if (chat.type === 'private') {
     const ticket = await db.getTicketByUserId(message.from.id, session.groupCategory)
     if (!ticket) {
-      db.add(message.from.id, 'open', session.groupCategory, messenger);
+      await db.add(message.from.id, 'open', session.groupCategory, messenger);
+    } else if (!ticket.messenger) {
+      // Handle legacy tickets that don't have a messenger field
+      console.log('[INFO] Updating legacy ticket without messenger field for user:', message.from.id);
+      ticket.messenger = messenger;
+      await ticket.save();
     }
     users.chat(ctx, message.chat);
     return ticket;

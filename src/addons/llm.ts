@@ -1,43 +1,79 @@
 import { Context } from '../interfaces';
-import OpenAI from 'openai';
+import { openai } from "@llamaindex/openai";
 import cache from '../cache';
+import * as log from 'fancy-log';
 
-const llm = new OpenAI({
-    apiKey: cache.config.llm_api_key,
-    baseURL: cache.config.llm_base_url,
-});
+let llm: any = null;
+
+function getLLMClient() {
+    if (!llm) {
+        llm = openai({
+            model: cache.config.llm_model,
+            reasoningEffort: "low",
+            apiKey: cache.config.llm_api_key,
+            baseURL: cache.config.llm_base_url,
+        });
+    }
+    return llm;
+}
 
 async function getResponseFromLLM(ctx: Context): Promise<string | null> {
-    const systemPrompt = `You are a Support Agent. You have been assigned to help 
-    the user based on the message and only the provided knowledge base. If the knowledge base
-    does not contain the information needed to answer the user's question, you should respond
-    with "null". Answer truthfully and to the best of your ability. Answer without
-    salutation and greetings.\n\n
-    Knowledgebase: """
-    ${cache.config.llm_knowledge}
-    """
-    `;
+    // Use system prompt from config, fallback to default if not set
+    const systemPrompt = cache.config.llm_system_prompt || 
+        `You are a Support Agent. You have been assigned to help the user based on the message and only the provided knowledge base. 
+        If the knowledge base does not contain the information needed to answer the user's question, you should respond with "null". 
+        Answer truthfully and to the best of your ability. Answer without salutation and greetings.
+        Format your response using Telegram Markdown syntax (not MarkdownV2). Use *bold* for emphasis only when needed.
+        IMPORTANT: Escape these special characters with a backslash when they appear as literal text (not as markdown formatting):
+        - Underscore _ (escape as \\_) when in usernames, emails, or URLs  
+        - Asterisk * (escape as \\*) when not used for bold
+        - Backtick \` (escape as \\\`) when not used for code
+        - Square brackets [ ] (escape as \\[ \\]) when not used for links
+        Example: @user\\_name or support\\_email@example.com should have escaped underscores.
+        Do not use emojis in your responses. Keep formatting simple and clean.`;
+    
+    const fullPrompt = `${systemPrompt}\n\nKnowledgebase: """\n${cache.config.llm_knowledge}\n"""`;
 
     var response = null
     try {
-        response = await llm.chat.completions.create({
-            model: cache.config.llm_model || 'gpt-3.5-turbo',
+        const llmClient = getLLMClient();
+        response = await llmClient.chat({
             messages: [
-                { content: systemPrompt, role: "system" },
+                { content: fullPrompt, role: "system" },
                 { content: ctx.message.text, role: "user" }
             ],
         });
-
-        const message = response.choices[0]?.message?.content;
-        if (message === "null" || message === "Null" || message === null) {
-            return null
-        }
-        return message;
     }
     catch (error) {
         console.error("Error in LLM response:", error);
         return null;
     }
+
+    if (!response || !response.message || !response.message.content) {
+        return null;
+    }
+
+    const messageContent = response.message.content;
+    const message = messageContent ? messageContent.toString() : null;
+    
+    // Log LLM response if logging is enabled
+    if (cache.config.llm_log_responses) {
+        log.info(`LLM Response for user ${ctx.message.from.id} (${ctx.message.from.first_name}):`);
+        log.info(`User message: ${ctx.message.text}`);
+        log.info(`LLM response: ${message}`);
+    }
+    
+    // Check for various null representations
+    if (!message || 
+        message === "null" || 
+        message === "Null" || 
+        message === "NULL" ||
+        message.toLowerCase() === "null" ||
+        message.trim() === "") {
+        return null;
+    }
+
+    return message;
 }
 
 export { getResponseFromLLM };

@@ -23,10 +23,9 @@ const strictEscape = (str: string): string => {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;'); // Escape single quotes
     case 'Markdown':
-      // Escape special Markdown characters (square brackets separately for safety)
+      // Escape special Markdown characters
       return str
-        .replace(/([[\]_*`])/g, '\$1')
-        .replace(/(\[|\])/g, '\$1');
+        .replace(/([[\]_*`])/g, '\\$1');
     default:
       return str.toString();
   }
