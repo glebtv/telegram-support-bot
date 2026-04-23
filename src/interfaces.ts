@@ -125,6 +125,12 @@ export class Config {
   llm_base_url: string;
   llm_model: string;
   llm_knowledge: string;
+  llm_system_prompt: string = '';
+  llm_log_responses: boolean = false;
+
+  // Custom Telegram Bot API server settings
+  api_root: string = 'https://api.telegram.org';
+  api_root_basic_auth: string = ''; // Format: 'username:password'
 }
 
 export interface Cache {

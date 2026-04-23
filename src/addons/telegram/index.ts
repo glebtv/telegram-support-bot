@@ -16,23 +16,90 @@ class TelegramAddon implements Addon {
 
   private static instance: TelegramAddon | null = null;
 
-  private constructor(token: string) {
-    this.bot = new Bot<BotContext>(token);
+  private redactBotToken(input: string): string {
+    return input.replace(/\/bot\d+:[A-Za-z0-9_-]+/g, '/bot<redacted>');
+  }
+
+  private constructor(token: string, apiRoot?: string, apiRootBasicAuth?: string) {
+    // Prepare bot options
+    const botOptions: any = {};
+
+    if (apiRoot) {
+      // grammy throws if apiRoot has a trailing slash
+      botOptions.client = {
+        ...(botOptions.client || {}),
+        apiRoot: apiRoot.replace(/\/$/, ''),
+      };
+      log.info(`Using custom API root: ${botOptions.client.apiRoot}`);
+    }
+
+    // Configure basic auth if provided
+    if (apiRootBasicAuth) {
+      const authHeader = `Basic ${Buffer.from(apiRootBasicAuth).toString('base64')}`;
+      const originalFetch = fetch;
+      botOptions.client = {
+        ...(botOptions.client || {}),
+        fetch: async (url: string | URL | Request, init?: RequestInit) => {
+          const method = init?.method || 'GET';
+          const startedAt = Date.now();
+          const rawUrl = typeof url === 'string' ? url : (url instanceof URL ? url.toString() : url.url);
+          const safeUrl = this.redactBotToken(rawUrl);
+          const headers = new Headers(init?.headers);
+          headers.set('Authorization', authHeader);
+          log.info(`[Telegram API] ${method} ${safeUrl}`);
+          try {
+            const fetchInit: RequestInit = { ...init, headers };
+            if ((fetchInit as any).signal && !((fetchInit as any).signal instanceof AbortSignal)) {
+              log.info(`[Telegram API] ${method} ${safeUrl} dropping incompatible request signal`);
+              delete (fetchInit as any).signal;
+            }
+            const response = await originalFetch(url, fetchInit);
+            const durationMs = Date.now() - startedAt;
+            log.info(`[Telegram API] ${method} ${safeUrl} -> ${response.status} (${durationMs}ms)`);
+            return response;
+          } catch (err) {
+            const durationMs = Date.now() - startedAt;
+            log.error(`[Telegram API] ${method} ${safeUrl} failed after ${durationMs}ms`, err);
+            throw err;
+          }
+        },
+      };
+      log.info('Using basic auth for API requests');
+    }
+
+    this.bot = new Bot<BotContext>(token, botOptions);
     const throttler = apiThrottler();
     this.bot.api.config.use(throttler);
+    this.bot.api.config.use(async (prev, method, payload, signal) => {
+      const startedAt = Date.now();
+      log.info(`[Telegram API middleware] Calling method=${method}`);
+      try {
+        const result = await prev(method, payload, signal);
+        const durationMs = Date.now() - startedAt;
+        log.info(`[Telegram API middleware] Success method=${method} (${durationMs}ms)`);
+        return result;
+      } catch (err) {
+        const durationMs = Date.now() - startedAt;
+        log.error(`[Telegram API middleware] Failed method=${method} (${durationMs}ms)`, err);
+        throw err;
+      }
+    });
     this.bot.init().then(() => {
       this.botInfo = this.bot.botInfo;
+      log.info(`Bot initialized successfully: @${this.botInfo.username} (id: ${this.botInfo.id})`);
+    }).catch((err) => {
+      log.error('Failed to initialize bot:', err);
     });
   }
 
-  public static getInstance(token?: string): TelegramAddon {
+  public static getInstance(token?: string, apiRoot?: string, apiRootBasicAuth?: string): TelegramAddon {
     if (!TelegramAddon.instance) {
       if (!token) {
         throw new Error(
           'Token must be provided when creating the TelegramAddon for the first time.'
         );
       }
-      TelegramAddon.instance = new TelegramAddon(token);
+      TelegramAddon.instance = new TelegramAddon(token, apiRoot, apiRootBasicAuth);
     }
     return TelegramAddon.instance;
   }
@@ -122,9 +189,19 @@ class TelegramAddon implements Addon {
 
     const keys = inline.initInline(this);
     registerCommonHandlers(this, keys);
+    log.info('Telegram handlers and middleware registered');
 
     // Start the Bot.
-    this.bot.start();
+    log.info('Starting Telegram polling loop...');
+    this.bot.start({
+      onStart: (botInfo) => {
+        log.info(`Telegram Addon polling started: @${botInfo.username} (id: ${botInfo.id})`);
+      },
+    }).then(() => {
+      log.info('Telegram polling loop stopped');
+    }).catch((err) => {
+      log.error('Failed to start Telegram Addon polling:', err);
+    });
   }
 }
 

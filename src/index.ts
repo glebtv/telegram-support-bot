@@ -42,7 +42,11 @@ function createAddons(): Addon[] {
       log.error('Please change your bot token in config/config.yaml');
       process.exit(1);
     }
-    const telegram = TelegramAddon.getInstance(cache.config.bot_token);
+    const telegram = TelegramAddon.getInstance(
+      cache.config.bot_token,
+      cache.config.api_root,
+      cache.config.api_root_basic_auth
+    );
     // Tag the addon with its platform (for later identification).
     (telegram as any).platform = 'telegram';
     addons.push(telegram);
